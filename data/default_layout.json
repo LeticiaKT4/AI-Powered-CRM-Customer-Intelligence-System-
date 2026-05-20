@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "widgets": [
+    {
+      "widget_id": "w_pipeline",
+      "widget_type": "bar",
+      "title": "Pipeline by Stage",
+      "metric_keys": ["pipeline_by_stage"],
+      "position": 0,
+      "config": {},
+      "visible": true
+    },
+    {
+      "widget_id": "w_opportunities",
+      "widget_type": "table",
+      "title": "Open Opportunities",
+      "metric_keys": ["opportunity_table"],
+      "position": 1,
+      "config": { "object_name": "Opportunity" },
+      "visible": true
+    }
+  ]
+}
