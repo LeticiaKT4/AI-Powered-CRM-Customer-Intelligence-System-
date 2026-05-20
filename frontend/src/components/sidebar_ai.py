@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import streamlit as st
 
-from api_client import post_analysis
+from api_client import AnalysisAPIError, post_analysis
 
 
 ANALYSIS_TYPE_LABELS = {
@@ -39,16 +39,27 @@ def render_sidebar(context_payload: dict) -> None:
     if not analyze or not prompt.strip():
         return
 
+    has_selection = bool(
+        context_payload.get("selected_customer") or context_payload.get("selected_customer_id")
+    )
     body = {
         "prompt": prompt.strip(),
         "analysis_type": analysis_type,
-        "context_scope": "dashboard",
+        "context_scope": "table_selection" if has_selection else "dashboard",
         "context_payload": context_payload,
     }
 
     with st.sidebar.spinner("Analyzing..."):
         try:
             result = post_analysis(body)
+        except AnalysisAPIError as exc:
+            st.sidebar.error(str(exc))
+            if exc.error_code == "gemini_quota":
+                st.sidebar.info("Quota limits are per API key. Wait, upgrade billing, or use a new key in `.env`.")
+            elif exc.error_code == "gemini_auth":
+                st.sidebar.info("Update `GEMINI_API_KEY` in the project root `.env` and restart the API server.")
+            st.session_state["ai_retry_prompt"] = prompt.strip()
+            return
         except Exception as exc:  # noqa: BLE001
             st.sidebar.error(f"Request failed: {exc}")
             st.session_state["ai_retry_prompt"] = prompt.strip()

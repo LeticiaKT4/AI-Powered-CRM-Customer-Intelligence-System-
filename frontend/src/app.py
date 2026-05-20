@@ -25,6 +25,7 @@ from components.executive_summary import render_executive_summary
 from components.insight_feed import render_insight_feed
 from components.sidebar_ai import render_sidebar
 from components.trends import render_trends
+from analysis_context import build_analysis_context
 from session import init_session
 
 st.set_page_config(
@@ -76,7 +77,13 @@ def main() -> None:
         mode = "unreachable"
 
     st.title("CRM Customer Health Dashboard")
-    st.caption(f"Data source: {mode}")
+    data_source = health.get("data_source", mode)
+    counts = health.get("record_counts") or {}
+    count_summary = ", ".join(f"{k}: {v}" for k, v in counts.items()) if counts else "n/a"
+    st.caption(
+        f"Mode: {mode} · Source: {data_source} · Records: {count_summary} · "
+        f"Benchmark tasks: {health.get('benchmark_tasks', 0)}"
+    )
 
     filters = st.session_state.get("cust_filters", DEFAULT_FILTERS.copy())
     customers_payload: dict = {}
@@ -115,11 +122,13 @@ def main() -> None:
 
     # Section 3: Customer Detail
     active_id = selected_id or st.session_state.get("selected_customer_id")
+    selected_customer: dict | None = None
     if active_id:
         try:
             detail_payload = fetch_detail(active_id)
             render_degraded_banner(detail_payload)
-            render_customer_detail(detail_payload.get("customer", {}))
+            selected_customer = detail_payload.get("customer") or None
+            render_customer_detail(selected_customer or {})
         except Exception as exc:  # noqa: BLE001
             st.warning(f"Could not load customer detail: {exc}")
     else:
@@ -145,11 +154,12 @@ def main() -> None:
     except Exception as exc:  # noqa: BLE001
         st.warning(f"Insight feed unavailable: {exc}")
 
-    context_payload = {
-        "executive_summary": customers_payload.get("executive_summary"),
-        "selected_customer_id": active_id,
-        "customer_count": len(customer_rows),
-    }
+    context_payload = build_analysis_context(
+        executive_summary=customers_payload.get("executive_summary"),
+        customer_rows=customer_rows,
+        active_customer_id=active_id,
+        selected_customer=selected_customer,
+    )
     render_sidebar(context_payload)
 
 

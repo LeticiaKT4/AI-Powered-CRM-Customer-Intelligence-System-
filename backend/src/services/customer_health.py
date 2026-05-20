@@ -231,8 +231,25 @@ def get_customer_detail(customer_id: str) -> CustomerDetail | None:
 
 
 def build_insight_feed() -> list[InsightFeedItem]:
+    from services.crm_ingest import get_ingest_service
+
     _, _, details = build_customer_summaries()
     items: list[InsightFeedItem] = []
+
+    ingest = get_ingest_service()
+    tasks = ingest.get_benchmark_tasks()
+    if not tasks.empty and "query" in tasks.columns:
+        for _, row in tasks.head(3).iterrows():
+            task_name = str(row.get("task", "benchmark"))
+            query = str(row.get("query", ""))[:100]
+            items.append(
+                InsightFeedItem(
+                    icon="📋",
+                    message=f"CRMArena [{task_name}]: {query}",
+                    severity="info",
+                )
+            )
+
     for d in sorted(details, key=lambda x: x.risk_score, reverse=True):
         if d.status == STATUS_AT_RISK:
             reason = "usage drop" if any("Usage dropped" in s.message for s in d.change_signals) else "risk score rise"

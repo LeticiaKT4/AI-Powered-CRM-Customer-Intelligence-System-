@@ -36,8 +36,25 @@ def build_metrics(keys: list[str] | None = None) -> list[CRMDataPoint]:
     opp = ingest.get_frame("Opportunity")
     opp, _ = _safe_rows(opp, ["StageName", "Amount"]) if not opp.empty else (opp, 0)
 
-    if opp is not None and not opp.empty and (keys is None or "pipeline_by_stage" in keys):
-        grouped = opp.groupby("StageName", dropna=True)["Amount"].sum()
+    pipeline_df = opp
+    pipeline_label = "StageName"
+    pipeline_value = "Amount"
+    pipeline_source = "Opportunity"
+
+    if pipeline_df.empty:
+        orders = ingest.get_frame("Order")
+        if not orders.empty and "Status" in orders.columns and "TotalAmount" in orders.columns:
+            pipeline_df, _ = _safe_rows(orders, ["Status", "TotalAmount"])
+            pipeline_label = "Status"
+            pipeline_value = "TotalAmount"
+            pipeline_source = "Order"
+
+    if (
+        pipeline_df is not None
+        and not pipeline_df.empty
+        and (keys is None or "pipeline_by_stage" in keys)
+    ):
+        grouped = pipeline_df.groupby(pipeline_label, dropna=True)[pipeline_value].sum()
         for stage, amount in grouped.items():
             points.append(
                 CRMDataPoint(
@@ -48,7 +65,7 @@ def build_metrics(keys: list[str] | None = None) -> list[CRMDataPoint]:
                     unit="USD",
                     timestamp=now,
                     dimensions={"stage": str(stage)},
-                    source_object="Opportunity",
+                    source_object=pipeline_source,
                 )
             )
         points.append(
@@ -56,10 +73,25 @@ def build_metrics(keys: list[str] | None = None) -> list[CRMDataPoint]:
                 id=str(uuid.uuid4()),
                 metric_key="opportunity_pipeline_total",
                 label="Pipeline Total",
-                value=float(opp["Amount"].sum()),
+                value=float(pipeline_df[pipeline_value].sum()),
                 unit="USD",
                 timestamp=now,
-                source_object="Opportunity",
+                source_object=pipeline_source,
+            )
+        )
+
+    cases = ingest.get_frame("Case")
+    if not cases.empty and (keys is None or "open_case_count" in keys):
+        open_cases = cases[cases["Status"] != "Closed"] if "Status" in cases.columns else cases
+        points.append(
+            CRMDataPoint(
+                id=str(uuid.uuid4()),
+                metric_key="open_case_count",
+                label="Open Cases",
+                value=len(open_cases),
+                unit="count",
+                timestamp=now,
+                source_object="Case",
             )
         )
 

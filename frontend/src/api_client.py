@@ -11,6 +11,26 @@ DEFAULT_BACKEND = "http://127.0.0.1:8000"
 TIMEOUT = 12.0
 
 
+class AnalysisAPIError(Exception):
+    """Raised when the analysis API returns an error response."""
+
+    def __init__(self, message: str, status_code: int = 0, error_code: str = "") -> None:
+        super().__init__(message)
+        self.status_code = status_code
+        self.error_code = error_code
+
+
+def _parse_error_detail(response: httpx.Response) -> tuple[str, str]:
+    try:
+        data = response.json()
+        detail = data.get("detail", data)
+        if isinstance(detail, dict):
+            return detail.get("message", str(detail)), detail.get("error", "api_error")
+        return str(detail), "api_error"
+    except Exception:  # noqa: BLE001
+        return response.text or response.reason_phrase or "Request failed", "api_error"
+
+
 def backend_url() -> str:
     return os.getenv("BACKEND_URL", DEFAULT_BACKEND).rstrip("/")
 
@@ -90,5 +110,7 @@ def post_analysis(body: dict[str, Any]) -> dict[str, Any]:
         if r.status_code == 408:
             detail = r.json()
             return {"status": "timeout", "detail": detail.get("detail", detail)}
-        r.raise_for_status()
+        if r.status_code >= 400:
+            message, error_code = _parse_error_detail(r)
+            raise AnalysisAPIError(message, status_code=r.status_code, error_code=error_code)
         return r.json()
